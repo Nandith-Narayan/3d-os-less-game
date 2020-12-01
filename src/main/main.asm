@@ -15,6 +15,7 @@ player_angle dt 0.37079
 temp_inc dt 0.0
 turn_right_speed dt -0.05
 turn_left_speed dt 0.05
+move_speed dt 7.0
 
 fov dt 1.0472 ;60 degrees in radian
 
@@ -24,11 +25,11 @@ screen_buffer TIMES 64000 db 0
 game_state db 0 ; 0 = main menu, 1 = game run state, 2 = loser
 
 
-map db 4,1,9,4,5
-    db 9,0,0,0,6
-    db 0,0,0,0,7
-    db 3,0,0,0,4
-    db 0,0,0,10,4
+map db 1,1,1,1,1
+    db 1,0,0,0,1
+   db 0,0,0,0,1
+    db 1,0,0,0,1
+    db 0,0,0,1,1
 
 ray_angle dt 0.0
 ray_angle_incriment dt 0.00327249235
@@ -83,9 +84,69 @@ move:
         
     .skip_turn_right:
     
+    ; check if W is pressed
+    mov eax,0
+    call handle_buffer
+    mov eax, keycode_w
+    call is_pressed
+    test eax, eax
+    jz .skip_move_forward
+        ;move forward
+        finit 
+        fld tword[player_angle]
+        fcos
+        fld tword[move_speed]
+        fmul
+        fild dword[player_x]
+        fadd
+        fist dword[player_x]
+        finit 
+        fld tword[player_angle]
+        fsin
+        fld tword[move_speed]
+        fmul
+        fchs
+        fild dword[player_y]
+        fadd
+        fist dword[player_y]
+        
+    .skip_move_forward:
+    
+    ; check if S is pressed
+    mov eax,0
+    call handle_buffer
+    mov eax, keycode_s
+    call is_pressed
+    test eax, eax
+    jz .skip_move_backward
+        ;move backwards
+        finit 
+        fld tword[player_angle]
+        fcos
+        fld tword[move_speed]
+        fmul
+        fchs
+        fild dword[player_x]
+        fadd
+        fist dword[player_x]
+        finit 
+        fld tword[player_angle]
+        fsin
+        fld tword[move_speed]
+        fmul
+        fild dword[player_y]
+        fadd
+        fist dword[player_y]
+        
+    .skip_move_backward:
+    
+    
+    
     
     
     ret
+    
+
 
 
 distance dd 0
@@ -189,7 +250,6 @@ ray_loop:
     .no_hit_y1:
     
     call draw_slice
-    call debug
     ; decriment ray_angle
     finit
     
@@ -222,7 +282,6 @@ image_slice TIMES 100 db 0
 scaled_image_slice TIMES 200 db 0
 vertical_offset dd 0;signed offset used for scaling slice
 temp_pixel dd 0
-cap_pixel dd 0
 texture dd 0
 draw_slice:
     
@@ -262,8 +321,8 @@ draw_slice:
     mov eax, [wall_height]
     cmp eax, 199
     jle .skip_clamp
-        mov eax, 199
-        mov [wall_height], eax  
+        ;mov eax, 199
+        ;mov [wall_height], eax  
     .skip_clamp:
     
     ;load texture
@@ -310,13 +369,7 @@ draw_slice:
     mov ebx, 2
     sar eax, 1
     mov [vertical_offset], eax
-    
-    add eax, 200
-    cmp eax, 200
-    jl .skip_range_check
-        mov eax, 200
-    .skip_range_check:
-    mov [cap_pixel], eax
+ 
     
     
     mov ecx, 0
@@ -325,9 +378,9 @@ draw_slice:
     add eax, ecx
     cmp eax, 0
     jl .skip_this_pixel
-    mov ebx, [cap_pixel]
+    mov ebx, [wall_height]
     cmp eax, ebx
-    jge .skip_this_pixel
+    jge .skip_this_pixel2
         
         mov [temp_pixel], eax
         finit
@@ -347,7 +400,7 @@ draw_slice:
     inc ecx
     cmp ecx, 200
     jb .scale_texture_loop
-    
+    .skip_this_pixel2:
     ;top_of_wall_pixel = (screen_height - wall_height)/2
     ;mov eax, 200
     ;mov ebx, [wall_height]
@@ -741,11 +794,23 @@ write_buffer_to_screen:
     ret
 clear_buffer:
 
-    mov ecx, 64000
-    .reset_buffer_loop:
+    mov ecx, 32000
+    .draw_roof_loop:
     mov eax, screen_buffer
     add eax, ecx
-    mov byte[eax] , 0
-    loop .reset_buffer_loop
+    dec eax
+    mov byte[eax], 11
+    loop .draw_roof_loop
+    
+    mov ecx, 32000
+    .draw_floor_loop:
+    mov eax, screen_buffer
+    mov ebx, 32000
+    add eax, ebx
+    add eax, ecx
+    dec eax
+    mov byte[eax], 6
+    loop .draw_floor_loop
+    
     ret
 
