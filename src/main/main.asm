@@ -1,7 +1,7 @@
 [bits 32]
 [ORG 0x01000000]
 jmp main
-;%include "lib/keyboard.asm"
+%include "lib/keyboard.asm"
 %include "images/temp.asm"
 ;%include "images/char.asm"
 MAP_SIZE dd 5
@@ -12,7 +12,10 @@ CAMERA_DISTANCE dd 280
 player_x dd 180
 player_y dd 280
 player_angle dt 0.37079
-temp_inc dt 0.01
+temp_inc dt 0.0
+turn_right_speed dt -0.05
+turn_left_speed dt 0.05
+
 fov dt 1.0472 ;60 degrees in radian
 
 
@@ -37,7 +40,7 @@ main:
     mov ebx, 0
     mov edx, 0
     mov ecx, 0
-    
+    call move
     call cast_rays
     call write_buffer_to_screen
     call clear_buffer
@@ -47,6 +50,43 @@ main:
 jmp main
 CONST_2 dt 2.0
 ray_count dd 0
+
+move:
+    finit 
+    fldz
+    fstp tword[temp_inc]
+
+
+    ; check if A is pressed
+    mov eax,0
+    call handle_buffer
+    mov eax, keycode_a
+    call is_pressed
+    test eax, eax
+    jz .skip_turn_left
+        ; turn left
+        finit 
+        fld tword[turn_left_speed]
+        fstp tword[temp_inc]
+    .skip_turn_left:
+    ; check if D is pressed
+    mov eax,0
+    call handle_buffer
+    mov eax, keycode_d
+    call is_pressed
+    test eax, eax
+    jz .skip_turn_right
+        ;turn right
+        finit 
+        fld tword[turn_right_speed]
+        fstp tword[temp_inc]
+        
+    .skip_turn_right:
+    
+    
+    
+    ret
+
 
 distance dd 0
 temp_val dd 0
