@@ -1,6 +1,7 @@
-# Welcome to an OS-less game
+# Welcome to a 3D OS-less game
 
 Hello! This is a small game written in x86 assembly that is meant to be run in the Bochs virtual machine.
+This is a 3D version that improves upon prevous game
 
 # Theory
 For an indepth look at the exact function of the code, please look at the [About.pdf](./About.pdf).
