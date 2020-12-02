@@ -183,7 +183,343 @@ move:
     ret
     
 
+normalize_player_angle:
+	finit
+	fldz
+	fld tword[player_angle]
+	fcomi
+	jc .add_tpi; st(0) < st(i)
+	finit
+	fld tword[player_angle]
+	fldpi
+	fld tword[CONST_2]
+	fmul
+	fcomi
+	jc .sub_tpi
+	jmp .done
+	
+	.sub_tpi:
+		finit
+		fld tword[player_angle]
+		fldpi
+		fld tword[CONST_2]
+		fmul
+		fsub
+		fstp tword[player_angle]
+		jmp .done
+	
+	.add_tpi:
+		finit
+		fldpi
+		fld tword[CONST_2]
+		fmul
+		fld tword[player_angle]
+		fadd
+		fstp tword[player_angle]
+	
+	.done:
+		ret
+	
 
+entity_dist dd 0
+entity_angle dt 0.0
+entity_t dd 0
+entity_x dd 0
+entity_y dd 0
+
+entity_height dd 100
+entity_screen_x dd 0
+
+entity_vert_offset dd 0
+entity_horz_offset dd 0
+entity_adj_height dd 0
+
+draw_loop_x dd 0
+draw_loop_x_end dd 0
+draw_loop_y dd 0
+draw_loop_y_end dd 0
+
+draw_x_coord dd 0
+draw_y_coord dd 0
+
+pix_color db 0
+
+draw_entities:
+    xchg bx, bx
+	movzx ecx, byte [entitycount]
+	.entity_loop:
+		; get entity struct
+		xor edx, edx
+		mov eax, 12
+		dec ecx
+		mul ecx
+		inc ecx
+		add eax, entities
+		
+		mov ebx, dword[eax]
+		mov dword[entity_t], ebx
+		add eax, 4
+		
+		mov ebx, dword[eax]
+		mov dword[entity_x], ebx
+		add eax, 4
+		
+		mov ebx, dword[eax]
+		mov dword[entity_y], ebx
+		cmp dword[entity_t], 0
+		jz .loop_foot
+		
+		; calc dist and angle
+		finit
+		mov eax, [player_y]
+        mov ebx, [entity_y]
+        sub eax, ebx
+		push eax
+		fild dword[esp]
+		pop eax
+        xor edx, edx
+        imul eax
+		mov [entity_dist], eax
+		
+		mov eax, [player_x]
+        mov ebx, [entity_x]
+        sub eax, ebx
+		push eax
+		fild dword[esp]
+		pop eax
+        xor edx, edx
+        imul eax
+		
+		mov ebx, [entity_dist]
+		add eax, ebx
+		mov [entity_dist], ebx
+		
+		; get angle and normalize to 0->2pi
+		fpatan
+		fldz
+		fcomip
+		jle .no_adjust
+		fldpi
+		fld tword[CONST_2]
+		fmul
+		fadd
+		.no_adjust:
+		fstp tword[entity_angle]
+		
+		; check entity in player view
+		finit
+		fld tword[entity_angle]
+		fld tword[player_angle]
+		fld tword[ray_angle_incriment]
+		mov eax, -160
+		push eax
+		fld dword[esp]
+		pop eax
+		fmul
+		fadd
+		fcomip
+		jg .no_draw
+		fld tword[player_angle]
+		fld tword[ray_angle_incriment]
+		mov eax, 160
+		push eax
+		fld dword[esp]
+		pop eax
+		fmul
+		fadd
+		fcomip
+		jl .no_draw
+		
+		; get entity scale
+		finit
+		fild dword[GRID_SIZE]
+		fild dword[entity_dist]
+		fdiv
+		fild dword[CAMERA_DISTANCE]
+		fmul
+		fist dword[entity_height]
+		
+		; get entity mid x
+		finit
+		fld tword[entity_angle]
+		; get left screen bound
+		fld tword[player_angle]
+		fld tword[ray_angle_incriment]
+		mov eax, -160
+		push eax
+		fld dword[esp]
+		pop eax
+		fmul
+		fadd
+		; get dist from left screen to entity angle
+		fsub
+		; get percentage
+		fld tword[ray_angle_incriment]
+		mov eax, 320
+		push eax
+		fld dword[esp]
+		pop eax
+		fmul
+		fdiv
+		; get x pos
+		mov eax, 320
+		push eax
+		fld dword[esp]
+		pop eax
+		fmul
+		fistp dword[entity_screen_x]
+		
+		;select image
+		;for now just choose wall
+		mov ebp, wall_1_data
+		
+		mov dword[entity_horz_offset], 0
+		; get left x
+		mov eax, dword[entity_height]
+		xor edx, edx
+		mov ebx, 2
+		div ebx
+		mov ebx, dword[entity_screen_x]
+		sub ebx, eax
+		cmp ebx, 0
+		jge .no_x_l_adj
+		neg ebx
+		mov dword[entity_horz_offset], ebx
+		mov ebx, 0
+		.no_x_l_adj:
+		mov dword[draw_loop_x], ebx
+		; get right x
+		mov ebx, [entity_screen_x]
+		sub ebx, eax
+		cmp ebx, 319
+		jle .no_x_r_adj
+		mov ebx, 319
+		.no_x_r_adj:
+		mov dword[draw_loop_x_end], ebx
+		
+		mov dword[entity_vert_offset], 0
+		; get up y
+		mov ebx, 100
+		sub ebx, eax
+		cmp ebx, 0
+		jge .no_y_u_adj
+		mov ebx, 0
+		.no_y_u_adj:
+		mov dword[draw_loop_y], ebx
+		; get down y
+		mov ebx, 100
+		sub ebx, eax
+		cmp ebx, 119
+		jle .no_y_d_adj
+		sub ebx, 119
+		mov dword[entity_vert_offset], ebx
+		mov ebx, 119
+		.no_y_d_adj:
+		mov dword[draw_loop_y_end], ebx
+		
+		;mov eax, dword[entity_vert_offset]
+		;shl eax, 1
+		;mov ebx, dword[entity_height]
+		;sub ebx, eax
+		;mov dword[entity_adj_height], ebx
+		
+		
+		; start of draw loop
+		push ecx
+		mov ecx, dword[draw_loop_x]
+		.x_draw:
+			; check distance
+			mov esi, dword[draw_loop_x]
+			mov eax, [4*esi+distance_buffer]
+			cmp eax, [entity_dist]
+			jg .x_draw_footer
+			
+			; get percentage
+			finit
+			push ecx
+			fild dword[esp]
+			pop ecx
+			fild dword[draw_loop_x]
+			fsub
+			fild dword[entity_horz_offset]
+			fadd
+			fild dword[entity_height]
+			fdiv
+			; get x pixel
+			mov eax, 100
+			push eax
+			fild dword[esp]
+			pop eax
+			fmul
+			fistp dword[draw_x_coord]
+			
+			push ecx
+			mov ecx, dword[draw_loop_y]
+			.y_draw:
+				; get percentage
+				finit
+				push ecx
+				fild dword[esp]
+				pop ecx
+				fild dword[draw_loop_y]
+				fsub
+				fild dword[entity_vert_offset]
+				fadd
+				fild dword[entity_height]
+				fdiv
+				; get y pixel
+				mov eax, 100
+				push eax
+				fild dword[esp]
+				pop eax
+				fmul
+				fistp dword[draw_y_coord]
+				
+				; get pixel
+				mov eax, dword[draw_y_coord]
+				xor edx, edx
+				mov ebx, 100
+				mul ebx
+				mov ebx, dword[draw_x_coord]
+				add eax, ebx
+				add eax, ebp
+				mov dl, byte[eax]
+				cmp dl, 0
+				jz .y_draw_footer
+				mov byte [pix_color], dl
+				
+				; draw_pixel
+				mov eax, ecx
+				mov ebx, 320
+				xor edx, edx
+				mul ebx
+				mov ebx, dword[esp]
+				add eax, ebx
+				add eax, screen_buffer
+				mov bl, byte [pix_color]
+				mov byte [eax], bl
+				
+				
+			.y_draw_footer:
+				inc ecx
+				cmp ecx, dword[draw_loop_y_end]
+				jle .y_draw
+				pop ecx
+			
+		.x_draw_footer:
+			inc ecx
+			cmp ecx, dword[draw_loop_x_end]
+			jle .x_draw
+			pop ecx
+		
+		
+		.no_draw:
+	.loop_foot:
+		dec ecx
+		cmp ecx, 0
+		jnz .entity_loop
+		
+	ret
 
 distance dd 0
 temp_val dd 0
