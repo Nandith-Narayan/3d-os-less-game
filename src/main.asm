@@ -46,7 +46,9 @@ main:
     mov edx, 0
     mov ecx, 0
     call move
+    call normalize_player_angle
     call cast_rays
+    call draw_entities
     call write_buffer_to_screen
     call clear_buffer
     mov al, [frame_count]
